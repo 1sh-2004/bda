@@ -1,0 +1,80 @@
+-- --------------------------------------------
+-- Q1: LOAD SALES DATASET + DISPLAY FIRST 10
+-- --------------------------------------------
+sales = LOAD '/user/hadoop/sales.txt'
+USING PigStorage(',')
+AS (order_id:int, product:chararray, category:chararray, amount:int);
+
+sales_10 = LIMIT sales 10;
+DUMP sales_10;
+
+
+-- --------------------------------------------
+-- Q2: FILTER amount > 5000
+-- --------------------------------------------
+filtered_sales = FILTER sales BY amount > 5000;
+DUMP filtered_sales;
+
+
+-- --------------------------------------------
+-- Q3: SORT DESCENDING BY amount
+-- --------------------------------------------
+sorted_sales = ORDER sales BY amount DESC;
+DUMP sorted_sales;
+
+
+-- --------------------------------------------
+-- Q4: GROUP BY category + TOTAL SALES
+-- --------------------------------------------
+grouped_sales = GROUP sales BY category;
+
+total_sales = FOREACH grouped_sales GENERATE
+    group AS category,
+    SUM(sales.amount) AS total_amount;
+
+DUMP total_sales;
+
+
+-- --------------------------------------------
+-- Q5: CUSTOMER DATASET + JOIN
+-- --------------------------------------------
+customers = LOAD '/user/hadoop/customers.txt'
+USING PigStorage(',')
+AS (order_id:int, customer_name:chararray, city:chararray);
+
+joined_data = JOIN sales BY order_id, customers BY order_id;
+DUMP joined_data;
+
+
+-- --------------------------------------------
+-- Q6: TOP 3 MOST EXPENSIVE PRODUCTS
+-- --------------------------------------------
+sorted_desc = ORDER sales BY amount DESC;
+top3 = LIMIT sorted_desc 3;
+DUMP top3;
+
+
+-- --------------------------------------------
+-- Q7: STORE FILTERED DATA INTO HDFS
+-- --------------------------------------------
+high_value = FILTER sales BY amount > 5000;
+
+STORE high_value INTO '/user/hadoop/output_high_value'
+USING PigStorage(',');
+
+
+-- --------------------------------------------
+-- BONUS: NESTED QUERY (VERY IMPORTANT FOR EXAM)
+-- --------------------------------------------
+-- Example: For each category, get only products with amount > 5000 and sum them
+
+nested_result = FOREACH (GROUP sales BY category) {
+
+    high_sales = FILTER sales BY amount > 5000;
+    
+    GENERATE
+        group AS category,
+        SUM(high_sales.amount) AS total_high_sales;
+};
+
+DUMP nested_result;

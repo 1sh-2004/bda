@@ -1,0 +1,782 @@
+# --------------------------------------------
+# 1. Import Libraries
+# --------------------------------------------
+import matplotlib.pyplot as plt
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col
+
+from pyspark.ml.feature import StringIndexer, VectorAssembler, MinMaxScaler
+from pyspark.ml.classification import LogisticRegression
+from pyspark.ml.regression import LinearRegression
+from pyspark.ml.evaluation import BinaryClassificationEvaluator, RegressionEvaluator
+
+# --------------------------------------------
+# 2. Initialize Spark Session
+# --------------------------------------------
+spark = SparkSession.builder.appName("Employee_Analysis").getOrCreate()
+
+# --------------------------------------------
+# (a) Load & Preprocess Data from HDFS
+# --------------------------------------------
+df = spark.read.csv(
+    "hdfs://localhost:9000/user/student/employee_attrition.csv",
+    header=True,
+    inferSchema=True
+)
+
+print("Initial Data")
+df.show(5)
+df.printSchema()
+
+# Handle missing values
+df = df.dropna()
+
+# Convert categorical columns to numeric
+indexer1 = StringIndexer(inputCol="Department", outputCol="Dept_Index")
+indexer2 = StringIndexer(inputCol="Gender", outputCol="Gender_Index")
+
+df = indexer1.fit(df).transform(df)
+df = indexer2.fit(df).transform(df)
+
+# --------------------------------------------
+# (b) Exploratory Data Analysis (EDA)
+# --------------------------------------------
+print("Total Employees:", df.count())
+
+print("Attrition Distribution")
+df.groupBy("Attrition").count().show()
+
+print("Average Salary by Department")
+df.groupBy("Department").avg("MonthlyIncome").show()
+
+print("Average Age by Attrition")
+df.groupBy("Attrition").avg("Age").show()
+
+# --------------------------------------------
+# Feature Engineering
+# --------------------------------------------
+feature_cols = ["Age", "YearsAtCompany", "MonthlyIncome", "Dept_Index", "Gender_Index"]
+
+assembler = VectorAssembler(inputCols=feature_cols, outputCol="features")
+df = assembler.transform(df)
+
+scaler = MinMaxScaler(inputCol="features", outputCol="scaled_features")
+df = scaler.fit(df).transform(df)
+
+# Split dataset
+train_df, test_df = df.randomSplit([0.8, 0.2], seed=42)
+
+# --------------------------------------------
+# (c) Classification Model (Attrition Prediction)
+# --------------------------------------------
+classifier = LogisticRegression(featuresCol="scaled_features", labelCol="Attrition")
+clf_model = classifier.fit(train_df)
+
+clf_predictions = clf_model.transform(test_df)
+
+clf_eval = BinaryClassificationEvaluator(labelCol="Attrition")
+auc = clf_eval.evaluate(clf_predictions)
+
+print("Attrition Prediction AUC:", auc)
+
+# --------------------------------------------
+# (d) Regression Model (Salary Prediction)
+# --------------------------------------------
+regressor = LinearRegression(featuresCol="scaled_features", labelCol="MonthlyIncome")
+reg_model = regressor.fit(train_df)
+
+reg_predictions = reg_model.transform(test_df)
+
+reg_eval = RegressionEvaluator(labelCol="MonthlyIncome", metricName="rmse")
+rmse = reg_eval.evaluate(reg_predictions)
+
+print("Salary Prediction RMSE:", rmse)
+
+# --------------------------------------------
+# (e) Visualization & Insights
+# --------------------------------------------
+
+# Convert to Pandas for plotting
+clf_pd = clf_predictions.select("Attrition", "prediction").toPandas()
+reg_pd = reg_predictions.select("MonthlyIncome", "prediction").toPandas()
+
+# ---- Classification Plot ----
+plt.figure(figsize=(6,4))
+plt.hist([clf_pd["Attrition"][clf_pd["prediction"] == 0],
+          clf_pd["Attrition"][clf_pd["prediction"] == 1]],
+         bins=2, label=["No Attrition", "Attrition"])
+plt.legend()
+plt.title("Attrition Prediction")
+plt.xlabel("Actual")
+plt.ylabel("Count")
+plt.show()
+
+# ---- Regression Plot ----
+plt.figure(figsize=(6,4))
+plt.scatter(reg_pd["MonthlyIncome"], reg_pd["prediction"])
+plt.xlabel("Actual Salary")
+plt.ylabel("Predicted Salary")
+plt.title("Salary Prediction")
+plt.show()
+
+# --------------------------------------------
+# Save Models to HDFS
+# --------------------------------------------
+clf_model.save("hdfs://localhost:9000/user/student/attrition_model")
+reg_model.save("hdfs://localhost:9000/user/student/salary_model")
+
+# --------------------------------------------
+# Stop Spark
+# --------------------------------------------
+spark.stop()
+
+
+
+
+
+
+
+
+# --------------------------------------------
+# 1. Import Libraries
+# --------------------------------------------
+import matplotlib.pyplot as plt
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col
+
+from pyspark.ml.feature import StringIndexer, VectorAssembler, MinMaxScaler
+from pyspark.ml.classification import LogisticRegression
+from pyspark.ml.evaluation import BinaryClassificationEvaluator
+
+# --------------------------------------------
+# 2. Initialize Spark Session
+# --------------------------------------------
+spark = SparkSession.builder.appName("Employee_Promotion").getOrCreate()
+
+# --------------------------------------------
+# (a) Load & Preprocess Data from HDFS
+# --------------------------------------------
+df = spark.read.csv(
+    "hdfs://localhost:9000/user/student/employee_promotion.csv",
+    header=True,
+    inferSchema=True
+)
+
+print("Sample Data")
+df.show(5)
+df.printSchema()
+
+# Handle missing values
+df = df.dropna()
+
+# Convert categorical columns
+indexer1 = StringIndexer(inputCol="department", outputCol="dept_index")
+indexer2 = StringIndexer(inputCol="education", outputCol="edu_index")
+indexer3 = StringIndexer(inputCol="gender", outputCol="gender_index")
+
+df = indexer1.fit(df).transform(df)
+df = indexer2.fit(df).transform(df)
+df = indexer3.fit(df).transform(df)
+
+# --------------------------------------------
+# (b) Exploratory Data Analysis (EDA)
+# --------------------------------------------
+print("Total Employees:", df.count())
+
+print("Promotion Distribution")
+df.groupBy("is_promoted").count().show()
+
+print("Department vs Promotion")
+df.groupBy("department").avg("is_promoted").show()
+
+print("Average Training Score vs Promotion")
+df.groupBy("is_promoted").avg("avg_training_score").show()
+
+# --------------------------------------------
+# Feature Engineering
+# --------------------------------------------
+feature_cols = [
+    "age",
+    "length_of_service",
+    "avg_training_score",
+    "dept_index",
+    "edu_index",
+    "gender_index"
+]
+
+assembler = VectorAssembler(inputCols=feature_cols, outputCol="features")
+df = assembler.transform(df)
+
+scaler = MinMaxScaler(inputCol="features", outputCol="scaled_features")
+df = scaler.fit(df).transform(df)
+
+# Split data
+train_df, test_df = df.randomSplit([0.8, 0.2], seed=42)
+
+# --------------------------------------------
+# (c) Train Classification Model
+# --------------------------------------------
+model = LogisticRegression(featuresCol="scaled_features", labelCol="is_promoted")
+clf_model = model.fit(train_df)
+
+predictions = clf_model.transform(test_df)
+
+# --------------------------------------------
+# (d) Evaluate & Visualize Performance
+# --------------------------------------------
+evaluator = BinaryClassificationEvaluator(labelCol="is_promoted")
+auc = evaluator.evaluate(predictions)
+
+print("Model AUC:", auc)
+
+# Convert to Pandas for plotting
+pd_df = predictions.select("is_promoted", "prediction").toPandas()
+
+plt.figure(figsize=(6,4))
+plt.hist([pd_df["is_promoted"][pd_df["prediction"] == 0],
+          pd_df["is_promoted"][pd_df["prediction"] == 1]],
+         bins=2, label=["Not Promoted", "Promoted"])
+plt.legend()
+plt.xlabel("Actual")
+plt.ylabel("Count")
+plt.title("Promotion Prediction")
+plt.show()
+
+# --------------------------------------------
+# (e) Deploy Model (Save & Use)
+# --------------------------------------------
+# Save model to HDFS
+clf_model.save("hdfs://localhost:9000/user/student/promotion_model")
+
+# Load model and predict new data
+from pyspark.ml.classification import LogisticRegressionModel
+
+loaded_model = LogisticRegressionModel.load(
+    "hdfs://localhost:9000/user/student/promotion_model"
+)
+
+new_predictions = loaded_model.transform(test_df)
+
+new_predictions.select("employee_id", "is_promoted", "prediction").show(5)
+
+# --------------------------------------------
+# Stop Spark
+# --------------------------------------------
+spark.stop()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# --------------------------------------------
+# Employee Analytics Using SparkSQL
+# --------------------------------------------
+
+from pyspark.sql import SparkSession
+
+# 1. Initialize Spark Session
+spark = SparkSession.builder.appName("EmployeeAnalytics").getOrCreate()
+
+# 2. Load data from HDFS
+df = spark.read.csv("hdfs:///employee_extended.csv", header=True, inferSchema=True)
+
+# 3. Create SQL View
+df.createOrReplaceTempView("employees")
+
+# 4. Highest salaried employee in each department
+highest_salary = spark.sql("""
+SELECT department, name, salary
+FROM employees e
+WHERE salary = (
+    SELECT MAX(salary)
+    FROM employees
+    WHERE department = e.department
+)
+""")
+
+print("Highest Salary in Each Department:")
+highest_salary.show()
+
+# 5. Gender-wise salary analysis
+gender_analysis = spark.sql("""
+SELECT gender,
+       AVG(salary) AS avg_salary,
+       MAX(salary) AS max_salary,
+       MIN(salary) AS min_salary
+FROM employees
+GROUP BY gender
+""")
+
+print("Gender-wise Salary Analysis:")
+gender_analysis.show()
+
+# 6. Save results to HDFS
+highest_salary.write.csv("hdfs:///output/highest_salary", header=True, mode="overwrite")
+gender_analysis.write.csv("hdfs:///output/gender_salary_analysis", header=True, mode="overwrite")
+# --------------------------------------------
+# Sales Data Analysis Using SparkSQL
+# --------------------------------------------
+
+from pyspark.sql import SparkSession
+
+# 1. Initialize Spark Session
+spark = SparkSession.builder.appName("SalesAnalysis").getOrCreate()
+
+# 2. Load data from HDFS
+sales_df = spark.read.csv("hdfs:///sales_data.csv", header=True, inferSchema=True)
+
+# 3. Create SQL View
+sales_df.createOrReplaceTempView("sales")
+
+# 4. Monthly total sales
+monthly_sales = spark.sql("""
+SELECT month(date) AS month, SUM(amount) AS total_sales
+FROM sales
+GROUP BY month(date)
+ORDER BY month
+""")
+
+print("Monthly Sales:")
+monthly_sales.show()
+
+# 5. Top 5 customers
+top_customers = spark.sql("""
+SELECT customer_id, SUM(amount) AS total_spent
+FROM sales
+GROUP BY customer_id
+ORDER BY total_spent DESC
+LIMIT 5
+""")
+
+print("Top 5 Customers:")
+top_customers.show()
+
+# 6. Average revenue per product
+avg_revenue = spark.sql("""
+SELECT product_id, AVG(amount) AS avg_revenue
+FROM sales
+GROUP BY product_id
+""")
+
+print("Average Revenue per Product:")
+avg_revenue.show()
+# --------------------------------------------
+# Department Insights Using SparkSQL
+# --------------------------------------------
+
+from pyspark.sql import SparkSession
+
+# 1. Initialize Spark Session
+spark = SparkSession.builder.appName("DepartmentInsights").getOrCreate()
+
+# 2. Load datasets from HDFS
+emp_df = spark.read.csv("hdfs:///employees.csv", header=True, inferSchema=True)
+dept_df = spark.read.csv("hdfs:///departments.csv", header=True, inferSchema=True)
+
+# 3. Create SQL Views
+emp_df.createOrReplaceTempView("emp")
+dept_df.createOrReplaceTempView("dept")
+
+# 4. Join employee names with department names
+emp_dept = spark.sql("""
+SELECT e.name, d.department_name
+FROM emp e
+JOIN dept d
+ON e.dept_id = d.dept_id
+""")
+
+print("Employee with Department Names:")
+emp_dept.show()
+
+# 5. Count employees in each department
+emp_count = spark.sql("""
+SELECT d.department_name, COUNT(e.emp_id) AS total_employees
+FROM emp e
+JOIN dept d
+ON e.dept_id = d.dept_id
+GROUP BY d.department_name
+""")
+
+print("Employee Count per Department:")
+emp_count.show()
+
+# 6. Departments with average salary > 60000
+high_salary_dept = spark.sql("""
+SELECT d.department_name, AVG(e.salary) AS avg_salary
+FROM emp e
+JOIN dept d
+ON e.dept_id = d.dept_id
+GROUP BY d.department_name
+HAVING AVG(e.salary) > 60000
+""")
+
+print("Departments with Avg Salary > 60000:")
+high_salary_dept.show()
+
+
+
+
+
+
+
+
+
+
+
+
+from pyspark import SparkContext
+
+# Initialize Spark Context
+sc = SparkContext("local", "LogAnalysis")
+
+# Load file from HDFS
+logs = sc.textFile("hdfs://localhost:9000/logs.txt")
+
+# Split each line into columns
+parsed = logs.map(lambda line: line.split())
+
+# Extract status codes (second last field)
+status_codes = parsed.map(lambda x: x[-2])
+
+# Count each status code
+status_count = status_codes.map(lambda x: (x, 1)) \
+                           .reduceByKey(lambda a, b: a + b)
+
+print("Status Code Count:")
+print(status_count.collect())
+
+# Extract IP addresses (first field)
+ips = parsed.map(lambda x: x[0])
+
+# Count IP frequency
+ip_count = ips.map(lambda x: (x, 1)) \
+              .reduceByKey(lambda a, b: a + b)
+
+# Find most common IP
+most_common_ip = ip_count.sortBy(lambda x: -x[1]).first()
+
+print("Most Common IP:", most_common_ip)
+
+# Filter error logs (HTTP 4xx and 5xx)
+errors = status_codes.filter(lambda x: x.startswith('4') or x.startswith('5'))
+
+error_count = errors.count()
+
+print("Total Errors:", error_count)
+
+# Save results back to HDFS
+status_count.saveAsTextFile("hdfs://localhost:9000/output/status_count")
+
+ip_count.saveAsTextFile("hdfs://localhost:9000/output/ip_count")
+
+
+
+
+
+
+from pyspark.sql import SparkSession
+
+# Initialize Spark Session
+spark = SparkSession.builder.appName("JSONProcessing").getOrCreate()
+
+# Load JSON file from HDFS
+df = spark.read.json("hdfs://localhost:9000/data.json")
+
+# Show schema
+df.printSchema()
+
+# Select specific columns
+df.select("name", "age").show()
+
+# Filter users older than 30
+filtered = df.filter(df.age > 30)
+
+filtered.show()
+
+# Group by city
+grouped = df.groupBy("city").count()
+
+grouped.show()
+
+# Save output back to HDFS
+grouped.write.json("hdfs://localhost:9000/output_json")
+
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, sum as _sum
+
+# Initialize Spark Session
+spark = SparkSession.builder.appName("SalesAnalysis").getOrCreate()
+
+# Load CSV from HDFS
+df = spark.read.csv("hdfs://localhost:9000/sales.csv", header=True, inferSchema=True)
+
+df.show()
+
+# Add Revenue column
+df = df.withColumn("Revenue", col("Price") * col("Quantity"))
+
+df.show()
+
+# Total revenue per product
+product_revenue = df.groupBy("Product") \
+                    .agg(_sum("Revenue").alias("TotalRevenue"))
+
+product_revenue.show()
+
+# Highest selling product
+top_product = product_revenue.sort(col("TotalRevenue").desc()).first()
+
+print("Top Product:", top_product)
+
+# Filter transactions with revenue > 500
+filtered = df.filter(col("Revenue") > 500)
+
+filtered.show()
+
+# Group by category
+category_revenue = df.groupBy("Category") \
+                     .agg(_sum("Revenue").alias("TotalRevenue"))
+
+category_revenue.show()
+
+# Save output to HDFS
+category_revenue.write.csv("hdfs://localhost:9000/output_sales")
+
+
+
+
+
+
+
+CREATE TABLE weblogs (
+    ip STRING,
+    timestamp STRING,
+    method STRING,
+    url STRING,
+    protocol STRING,
+    status INT,
+    size INT
+)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ','
+STORED AS TEXTFILE;
+
+LOAD DATA INPATH '/user/hadoop/weblogs.csv'
+INTO TABLE weblogs;
+
+Find most visited url
+SELECT url, COUNT(*) AS visit_count
+FROM weblogs
+GROUP BY url
+ORDER BY visit_count DESC
+LIMIT 10;
+
+Detect peak traffic
+SELECT 
+    SUBSTR(timestamp, 12, 2) AS hour,
+    COUNT(*) AS traffic
+FROM weblogs
+GROUP BY SUBSTR(timestamp, 12, 2)
+ORDER BY traffic DESC;
+
+Find 404 Errors
+SELECT *
+FROM weblogs
+WHERE status = 404;
+
+Partitioned Table
+CREATE TABLE weblogs_partitioned (
+    ip STRING,
+    method STRING,
+    url STRING,
+    protocol STRING,
+    status INT,
+    size INT
+)
+PARTITIONED BY (date STRING)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ',';
+
+SET hive.exec.dynamic.partition = true;
+SET hive.exec.dynamic.partition.mode = nonstrict;
+
+INSERT INTO TABLE weblogs_partitioned
+PARTITION (date)
+SELECT 
+    ip,
+    method,
+    url,
+    protocol,
+    status,
+    size,
+    SUBSTR(timestamp, 1, 11) AS date
+FROM weblogs;
+
+Bucketed Table by Status Code
+CREATE TABLE weblogs_bucketed (
+    ip STRING,
+    timestamp STRING,
+    method STRING,
+    url STRING,
+    protocol STRING,
+    status INT,
+    size INT
+)
+CLUSTERED BY (status) INTO 4 BUCKETS;
+
+SET hive.enforce.bucketing = true;
+
+INSERT INTO TABLE weblogs_bucketed
+SELECT * FROM weblogs;
+
+
+
+Top 5 Highest Rated Movies
+SELECT title, AVG(rating) AS avg_rating
+FROM movie_ratings
+GROUP BY title
+ORDER BY avg_rating DESC
+LIMIT 5;
+
+Most Popular Genre
+SELECT genre, COUNT(*) AS total_ratings
+FROM movie_ratings
+GROUP BY genre
+ORDER BY total_ratings DESC
+LIMIT 1;
+
+Extract year from timestamp
+SELECT 
+    SUBSTR(timestamp, 1, 4) AS year,
+    COUNT(*) AS total_reviews,
+    AVG(rating) AS avg_rating
+FROM movie_ratings
+GROUP BY SUBSTR(timestamp, 1, 4)
+ORDER BY year;
+
+Create Partitioned Table
+CREATE TABLE movie_partitioned (
+    movie_id INT,
+    title STRING,
+    release_year INT,
+    user_id INT,
+    rating FLOAT,
+    timestamp STRING
+)
+PARTITIONED BY (genre STRING)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ',';
+
+INSERT INTO TABLE movie_partitioned
+PARTITION (genre)
+SELECT 
+    movie_id,
+    title,
+    release_year,
+    user_id,
+    rating,
+    timestamp,
+    genre
+FROM movie_ratings;
+
+
+Airline with the Most Delays
+SELECT airline, COUNT(*) AS total_delays
+FROM flight_data
+WHERE status = 'Delayed'
+GROUP BY airline
+ORDER BY total_delays DESC
+LIMIT 1;
+
+
+Count Flights by Status
+SELECT status, COUNT(*) AS total_flights
+FROM flight_data
+GROUP BY status;
+
+Average Delay per Airline
+SELECT airline, AVG(delay_minutes) AS avg_delay
+FROM flight_data
+GROUP BY airline
+ORDER BY avg_delay DESC;
+
+
+
+
+
+
+create 'students', 'personal', 'academic'
+create 'employees', 'details', 'salary'
+create 'orders', 'customer', 'items', 'payment'
+
+describe 'students'
+describe 'employees'
+describe 'orders'
+
+
+disable 'orders'
+drop 'orders'
+
+create 'orders', 'customer', 'items', 'payment'
+
+
+
+put 'students', 's1', 'personal:name', 'Amit'
+put 'students', 's1', 'personal:age', '20'
+put 'students', 's1', 'academic:marks', '85'
+put 'students', 's1', 'academic:grade', 'A'
+
+put 'students', 's2', 'personal:name', 'Neha'
+put 'students', 's2', 'personal:age', '21'
+put 'students', 's2', 'academic:marks', '75'
+put 'students', 's2', 'academic:grade', 'B'
+
+put 'students', 's3', 'personal:name', 'Rahul'
+put 'students', 's3', 'personal:age', '22'
+put 'students', 's3', 'academic:marks', '90'
+put 'students', 's3', 'academic:grade', 'A'
+
+Retrieve Name & Marks of Students
+scan 'students', {COLUMNS => ['personal:name', 'academic:marks']}
+
+Top 3 Orders (by RowKey)
+scan 'orders', {LIMIT => 3}
+
+Employees with Basic Pay > 55000
+scan 'employees', {
+  FILTER => "SingleColumnValueFilter('salary', 'basic', >, 'binary:55000')"
+}
+
+Students with Marks > 80
+scan 'students', {
+  FILTER => "SingleColumnValueFilter('academic', 'marks', >, 'binary:80')"
+}
+
+Employees in IT Department
+scan 'employees', {
+  FILTER => "SingleColumnValueFilter('details', 'department', =, 'binary:IT')"
+}
+
+Count Rows in Employees
+count 'employees'
+
+
+
+Update B003 → Borrowed by Michael
+put 'library', 'B003', 'availability:status', 'Borrowed'
+put 'library', 'B003', 'availability:borrower', 'Michael'
+
+
+
+Delete transaction T002
+deleteall 'transactions', 'T002'

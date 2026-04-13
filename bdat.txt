@@ -1,0 +1,485 @@
+Spark df
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, sum as _sum
+
+spark = SparkSession.builder.appName("AppName").getOrCreate()
+
+# Load data (CHANGE TYPE + FILE)
+df = spark.read.TYPE("hdfs://localhost:9000/FILE", header=True, inferSchema=True)
+
+# Show data
+df.show()
+
+# Select columns
+df.select("col1", "col2").show()
+
+# Filter condition
+filtered = df.filter(col("col") > VALUE)
+filtered.show()
+
+# Add new column
+df = df.withColumn("NewCol", col("col1") * col("col2"))
+
+# Group + aggregation
+grouped = df.groupBy("col") \
+            .agg(_sum("NewCol").alias("Total"))
+
+grouped.show()
+
+# Sort (optional)
+top = grouped.sort(col("Total").desc()).first()
+print(top)
+
+# Save output
+grouped.write.TYPE("hdfs://localhost:9000/output_folder")
+
+
+
+
+
+Spark rdd 
+from pyspark import SparkContext
+
+sc = SparkContext("local", "AppName")
+
+# Load file (HDFS)
+data = sc.textFile("hdfs://localhost:9000/FILE.txt")
+
+# Parse data
+parsed = data.map(lambda line: line.split())
+
+# Extract field (CHANGE INDEX)
+field = parsed.map(lambda x: x[INDEX])
+
+# Count occurrences
+count = field.map(lambda x: (x, 1)) \
+             .reduceByKey(lambda a, b: a + b)
+
+print(count.collect())
+
+# Find most frequent
+top = count.sortBy(lambda x: -x[1]).first()
+print(top)
+
+# Filter condition (CHANGE CONDITION)
+filtered = field.filter(lambda x: CONDITION)
+
+print(filtered.count())
+
+# Save output
+count.saveAsTextFile("hdfs://localhost:9000/output_folder")
+
+
+
+
+
+Spark ml
+# ============================================
+# UNIVERSAL SPARK ML TEMPLATE (EXAM USE)
+# ============================================
+
+from pyspark.sql import SparkSession
+from pyspark.ml.feature import StringIndexer, VectorAssembler, MinMaxScaler
+from pyspark.ml.classification import LogisticRegression
+from pyspark.ml.regression import LinearRegression
+from pyspark.ml.clustering import KMeans
+from pyspark.ml.evaluation import BinaryClassificationEvaluator, RegressionEvaluator
+
+# --------------------------------------------
+# 1. Start Spark Session
+# --------------------------------------------
+spark = SparkSession.builder.appName("Exam").getOrCreate()
+
+# --------------------------------------------
+# 2. Load Data from HDFS
+# --------------------------------------------
+df = spark.read.csv("hdfs://localhost:9000/path/### DATASET_NAME ###.csv",
+                    header=True, inferSchema=True)
+
+df.show(5)
+df.printSchema()
+
+# --------------------------------------------
+# 3. Preprocessing
+# --------------------------------------------
+df = df.dropna()
+
+# Convert categorical columns (add/remove as needed)
+indexer1 = StringIndexer(inputCol="### CAT_COL1 ###", outputCol="cat1_index")
+df = indexer1.fit(df).transform(df)
+
+# (Optional - if more categorical columns)
+# indexer2 = StringIndexer(inputCol="### CAT_COL2 ###", outputCol="cat2_index")
+# df = indexer2.fit(df).transform(df)
+
+# --------------------------------------------
+# 4. EDA (write ANY 2-3 lines)
+# --------------------------------------------
+df.count()
+
+df.groupBy("### TARGET ###").count().show()
+
+df.groupBy("### CAT_COL1 ###").avg("### NUM_COL ###").show()
+
+# --------------------------------------------
+# 5. Feature Engineering
+# --------------------------------------------
+features = ["### NUM_COL1 ###", "### NUM_COL2 ###", "cat1_index"]  # add more if needed
+
+assembler = VectorAssembler(inputCols=features, outputCol="features")
+df = assembler.transform(df)
+
+scaler = MinMaxScaler(inputCol="features", outputCol="scaled_features")
+df = scaler.fit(df).transform(df)
+
+# --------------------------------------------
+# 6. Train-Test Split
+# --------------------------------------------
+train, test = df.randomSplit([0.8, 0.2], seed=42)
+
+# ============================================
+# 7. MODEL (CHOOSE ONE BASED ON QUESTION)
+# ============================================
+
+# ---------- CLASSIFICATION ----------
+model = LogisticRegression(featuresCol="scaled_features", labelCol="### TARGET ###")
+
+# ---------- REGRESSION ----------
+# model = LinearRegression(featuresCol="scaled_features", labelCol="### TARGET ###")
+
+# ---------- CLUSTERING ----------
+# model = KMeans(featuresCol="scaled_features", k=3)
+
+# --------------------------------------------
+# 8. Train Model
+# --------------------------------------------
+trained_model = model.fit(train)
+
+pred = trained_model.transform(test)
+
+# --------------------------------------------
+# 9. Evaluation
+# --------------------------------------------
+
+# For Classification
+evaluator = BinaryClassificationEvaluator(labelCol="### TARGET ###")
+print("AUC:", evaluator.evaluate(pred))
+
+# For Regression
+# evaluator = RegressionEvaluator(labelCol="### TARGET ###", metricName="rmse")
+# print("RMSE:", evaluator.evaluate(pred))
+
+# For Clustering
+# pred.select("### ID_COL ###", "prediction").show()
+
+# --------------------------------------------
+# 10. Visualization (Basic)
+# --------------------------------------------
+import matplotlib.pyplot as plt
+
+pd_df = pred.select("### TARGET ###", "prediction").toPandas()
+
+plt.hist(pd_df["prediction"])
+plt.title("Model Output")
+plt.show()
+
+# --------------------------------------------
+# 11. Save Model (HDFS)
+# --------------------------------------------
+trained_model.save("hdfs://localhost:9000/path/### MODEL_NAME ###")
+
+# --------------------------------------------
+# 12. Load Model (Deployment)
+# --------------------------------------------
+# For Classification
+from pyspark.ml.classification import LogisticRegressionModel
+loaded = LogisticRegressionModel.load("hdfs://localhost:9000/path/### MODEL_NAME ###")
+
+# For Regression
+# from pyspark.ml.regression import LinearRegressionModel
+# loaded = LinearRegressionModel.load("hdfs://localhost:9000/path/### MODEL_NAME ###")
+
+# Predict again
+loaded.transform(test).show()
+
+# --------------------------------------------
+# End
+# --------------------------------------------
+spark.stop()
+
+
+
+
+Spark sql
+# =====================================================
+# ?? UNIVERSAL SPARKSQL TEMPLATE (EDIT MARKED LINES)
+# =====================================================
+
+from pyspark.sql import SparkSession
+
+# 1. Start Spark
+spark = SparkSession.builder.appName("Exam").getOrCreate()
+
+# 2. Load Data (?? CHANGE FILE PATH)
+df = spark.read.csv("hdfs:///YOUR_FILE.csv", header=True, inferSchema=True)
+
+# 3. Create View (?? CHANGE TABLE NAME)
+df.createOrReplaceTempView("table_name")
+
+# =====================================================
+# ?? WRITE YOUR QUERY BELOW (EDIT BASED ON QUESTION)
+# =====================================================
+
+result = spark.sql("""
+
+-- ================================
+-- ?? BASIC SELECT
+-- ================================
+-- SELECT column1, column2
+-- FROM table_name
+-- WHERE condition
+
+-- ================================
+-- ?? FILTER (example)
+-- ================================
+-- WHERE age > 30
+
+-- ================================
+-- ?? GROUP BY + AGGREGATE
+-- ================================
+-- SELECT column, COUNT(*) 
+-- FROM table_name
+-- GROUP BY column
+
+-- ================================
+-- ?? AVG / SUM / MAX / MIN
+-- ================================
+-- SELECT column, AVG(salary)
+-- FROM table_name
+-- GROUP BY column
+
+-- ================================
+-- ?? TOP N (highest / best)
+-- ================================
+-- SELECT column, SUM(amount) AS total
+-- FROM table_name
+-- GROUP BY column
+-- ORDER BY total DESC
+-- LIMIT 5
+
+-- ================================
+-- ?? DATE (monthly/yearly)
+-- ================================
+-- SELECT month(date_column), SUM(amount)
+-- FROM table_name
+-- GROUP BY month(date_column)
+
+-- ================================
+-- ?? JOIN (2 tables)
+-- ================================
+-- SELECT a.col, b.col
+-- FROM table1 a
+-- JOIN table2 b
+-- ON a.common_id = b.common_id
+
+-- ================================
+-- ?? HAVING (after GROUP BY)
+-- ================================
+-- SELECT dept, AVG(salary)
+-- FROM table_name
+-- GROUP BY dept
+-- HAVING AVG(salary) > 60000
+
+-- ================================
+-- ?? SUBQUERY (highest per group)
+-- ================================
+-- SELECT department, name, salary
+-- FROM table_name t
+-- WHERE salary = (
+--     SELECT MAX(salary)
+--     FROM table_name
+--     WHERE department = t.department
+-- )
+
+-- =====================================================
+-- ? ?? FINAL QUERY (WRITE ONLY ONE ACTIVE QUERY BELOW)
+-- =====================================================
+
+SELECT * FROM table_name   -- ?? REPLACE THIS LINE
+
+""")
+
+# 4. Show Output
+result.show()
+
+# 5. Save Output (optional)
+result.write.csv("hdfs:///output_folder", header=True, mode="overwrite")
+
+
+
+Hive
+-- ==============================
+-- 1. CREATE TABLE + LOAD DATA
+-- ==============================
+
+CREATE TABLE <table_name> (
+    <col1> <TYPE>,
+    <col2> <TYPE>,
+    <col3> <TYPE>,
+    <col4> <TYPE>,
+    <col5> <TYPE>,
+    <col6> <TYPE>
+)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ','
+STORED AS TEXTFILE;
+
+LOAD DATA INPATH '<HDFS_PATH>'
+INTO TABLE <table_name>;
+
+
+-- ==============================
+-- 2. TOP / MOST (COUNT)
+-- ==============================
+
+SELECT <column>, COUNT(*) AS total
+FROM <table_name>
+WHERE <condition_if_any>
+GROUP BY <column>
+ORDER BY total DESC
+LIMIT <N>;
+
+
+-- ==============================
+-- 3. AVERAGE / PERFORMANCE
+-- ==============================
+
+SELECT <group_column>, AVG(<numeric_column>) AS avg_value
+FROM <table_name>
+GROUP BY <group_column>
+ORDER BY avg_value DESC;
+
+
+-- ==============================
+-- 4. FILTER DATA
+-- ==============================
+
+SELECT *
+FROM <table_name>
+WHERE <column> = '<value>';
+
+
+-- ==============================
+-- 5. COUNT BY CATEGORY
+-- ==============================
+
+SELECT <column>, COUNT(*) AS total
+FROM <table_name>
+GROUP BY <column>;
+
+
+-- ==============================
+-- 6. DATE / TIME ANALYSIS
+-- ==============================
+
+-- Extract YEAR
+SELECT SUBSTR(<timestamp_column>, 1, 4) AS year, COUNT(*) AS total
+FROM <table_name>
+GROUP BY SUBSTR(<timestamp_column>, 1, 4);
+
+-- Extract HOUR
+SELECT SUBSTR(<timestamp_column>, 12, 2) AS hour, COUNT(*) AS total
+FROM <table_name>
+GROUP BY SUBSTR(<timestamp_column>, 12, 2);
+
+
+-- ==============================
+-- 7. PARTITIONED TABLE
+-- ==============================
+
+CREATE TABLE <partition_table> (
+    <col1> <TYPE>,
+    <col2> <TYPE>,
+    <col3> <TYPE>,
+    <col4> <TYPE>
+)
+PARTITIONED BY (<partition_column> STRING)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ',';
+
+SET hive.exec.dynamic.partition = true;
+SET hive.exec.dynamic.partition.mode = nonstrict;
+
+INSERT INTO TABLE <partition_table>
+PARTITION (<partition_column>)
+SELECT 
+    <col1>,
+    <col2>,
+    <col3>,
+    <col4>,
+    <partition_column>
+FROM <original_table>;
+
+-- Query partition
+SELECT *
+FROM <partition_table>
+WHERE <partition_column> = '<value>';
+
+
+-- ==============================
+-- 8. BUCKETED TABLE
+-- ==============================
+
+CREATE TABLE <bucket_table> (
+    <col1> <TYPE>,
+    <col2> <TYPE>,
+    <col3> <TYPE>,
+    <col4> <TYPE>,
+    <col5> <TYPE>
+)
+CLUSTERED BY (<bucket_column>) INTO 4 BUCKETS;
+
+SET hive.enforce.bucketing = true;
+
+INSERT INTO TABLE <bucket_table>
+SELECT * FROM <original_table>;
+
+-- Query bucket
+SELECT *
+FROM <bucket_table>
+WHERE <bucket_column> = '<value>';
+
+
+
+
+
+
+Hbase
+create '<TABLE>', '<CF1>', '<CF2>'
+
+put '<TABLE>', '<ROW>', '<CF:COL>', '<VALUE>'
+
+get '<TABLE>', '<ROW>'
+
+scan '<TABLE>'
+
+scan '<TABLE>', {COLUMNS => ['<CF1:COL1>', '<CF2:COL2>']}
+
+scan '<TABLE>', {
+ FILTER => "SingleColumnValueFilter('<CF>', '<COL>', <OP>, 'binary:<VALUE>')"
+}
+
+scan '<TABLE>', {LIMIT => <N>}
+
+put '<TABLE>', '<ROW>', '<CF:COL>', '<NEW_VALUE>'
+
+delete '<TABLE>', '<ROW>', '<CF:COL>'
+
+deleteall '<TABLE>', '<ROW>'
+
+count '<TABLE>'
+
+disable '<TABLE>'
+drop '<TABLE>'
+
+describe '<TABLE>'
